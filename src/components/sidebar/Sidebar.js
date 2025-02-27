@@ -27,6 +27,13 @@ const Sidebar = ({ activeTab, setActiveTab, designElements, handleDragStart, onW
         opacity: parseFloat(textStyle.opacity)
       });
       setTextWatermark('');
+      // Reset text style to defaults after adding
+      setTextStyle({
+        fontSize: '24',
+        color: '#000000',
+        opacity: '0.5',
+        fontWeight: 'normal'
+      });
     }
   };
 
@@ -202,7 +209,7 @@ const Sidebar = ({ activeTab, setActiveTab, designElements, handleDragStart, onW
                   onDragStart={(e) => handleDragStart(e, element)}
                 >
                   <div className="flex items-center space-x-2">
-                    <Type className="w-5 h-5" />
+                    {element.icon}
                     <span className="text-sm">{element.name}</span>
                   </div>
                 </div>

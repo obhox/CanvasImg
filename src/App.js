@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import Toolbar from './components/toolbar/Toolbar';
 import Sidebar from './components/sidebar/Sidebar';
 import Canvas from './components/canvas/Canvas';
+import ExportButton from './components/ui/ExportButton';
 import { DESIGN_ELEMENTS } from './utils/constants';
+import JSZip from 'jszip';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('watermarks');
@@ -38,11 +40,16 @@ const App = () => {
         case 'text':
           setElements(prev => [...prev, {
             id: Date.now(),
+            type: 'text',
             ...element,
             position: { x, y },
-            content: element.name,
-            fontSize: 16,
-            color: '#000000'
+            text: element.name,
+            fontSize: element.fontSize || 24,
+            fontFamily: element.fontFamily || 'Arial, sans-serif',
+            fontWeight: element.fontWeight || 'normal',
+            color: element.color || '#000000',
+            scale: 1,
+            rotation: 0
           }]);
           break;
         case 'shape':
@@ -51,9 +58,20 @@ const App = () => {
             ...element,
             position: { x, y },
             size: { width: 100, height: 100 },
-            color: '#000000',
-            rotation: 0,
-            scale: 1
+            scale: 1,
+            rotation: 0
+          }]);
+          break;
+        case 'image':
+          setWatermarks(prev => [...prev, {
+            id: Date.now(),
+            type: 'image',
+            url: element.url,
+            name: element.name || 'Watermark Image',
+            position: { x, y },
+            scale: 1,
+            opacity: 1,
+            rotation: 0
           }]);
           break;
         default:
@@ -96,16 +114,87 @@ const App = () => {
   };
 
   const handleWatermarkUpload = (imageData) => {
+    // Get the center of the canvas for initial positioning
+    const canvasElement = canvasRef.current;
+    const rect = canvasElement.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
     setWatermarks(prev => [...prev, {
-      id: `watermark-${Date.now()}-${Math.random()}`,
+      id: `watermark-${Date.now()}`,
       type: 'image',
       url: imageData,
       name: 'Watermark Image',
-      position: { x: 0, y: 0 },
+      position: { x: centerX - 50, y: centerY - 50 }, // Center the watermark with offset
       scale: 1,
       opacity: 1,
       rotation: 0
     }]);
+  };
+
+  const handleExport = async () => {
+    if (!exportCanvas) {
+      alert('Canvas is not ready for export');
+      return;
+    }
+
+    try {
+      const dataUrl = await exportCanvas();
+      if (!dataUrl) {
+        throw new Error('Failed to generate canvas data URL');
+      }
+
+      // Create and trigger download
+      const link = document.createElement('a');
+      link.download = 'canvas-design.png';
+      link.href = dataUrl;
+      document.body.appendChild(link); // Needed for Firefox
+      link.click();
+      document.body.removeChild(link); // Clean up
+    } catch (error) {
+      console.error('Error exporting canvas:', error);
+      alert('Failed to export canvas. Please try again.');
+    }
+  };
+
+  const handleBatchExport = async () => {
+    if (!exportCanvas) {
+      alert('Canvas is not ready for export');
+      return;
+    }
+
+    try {
+      // Create a zip file with all images
+      const zip = new JSZip();
+      
+      // Export current canvas state
+      const dataUrl = await exportCanvas();
+      if (!dataUrl) {
+        throw new Error('Failed to generate canvas data URL');
+      }
+
+      // Convert data URL to blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      
+      // Add to zip
+      zip.file('canvas-design.png', blob);
+
+      // Generate zip file
+      const content = await zip.generateAsync({ type: 'blob' });
+      
+      // Download zip file
+      const link = document.createElement('a');
+      link.download = 'canvas-designs.zip';
+      link.href = URL.createObjectURL(content);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error('Error exporting batch:', error);
+      alert('Failed to export batch. Please try again.');
+    }
   };
 
   const handleTextWatermarkAdd = (textWatermark) => {
@@ -114,6 +203,9 @@ const App = () => {
       type: 'text',
       ...textWatermark,
       position: { x: 50, y: 50 }, // Initial position
+      fontSize: textWatermark.fontSize || 24,
+      fontFamily: textWatermark.fontFamily || 'Arial, sans-serif',
+      color: textWatermark.color || '#000000',
       scale: 1,
       rotation: 0
     };
@@ -160,15 +252,15 @@ const App = () => {
   };
 
   const updateElementPosition = (id, position) => {
-    setElements(prev => prev.map(el => 
-      el.id === id ? { ...el, position } : el
-    ));
+    setElements(prev => 
+      prev.map(el => el.id === id ? { ...el, position } : el)
+    );
   };
 
   const updateElementProperties = (id, properties) => {
-    setElements(prev => prev.map(el =>
-      el.id === id ? { ...el, ...properties } : el
-    ));
+    setElements(prev => 
+      prev.map(el => el.id === id ? { ...el, ...properties } : el)
+    );
   };
 
   const removeElement = (id) => {
@@ -178,24 +270,6 @@ const App = () => {
   const handleSave = () => {
     // Placeholder for save functionality
     alert('Save functionality is not implemented yet.');
-  };
-
-  const handleExport = async () => {
-    if (!exportCanvas) {
-      alert('Canvas is not ready for export');
-      return;
-    }
-
-    try {
-      const dataUrl = await exportCanvas();
-      const link = document.createElement('a');
-      link.download = 'canvas-design.png';
-      link.href = dataUrl;
-      link.click();
-    } catch (error) {
-      console.error('Error exporting canvas:', error);
-      alert('Failed to export canvas. Please try again.');
-    }
   };
 
   const handleImageNavigation = (direction) => {
@@ -248,11 +322,19 @@ const App = () => {
         showGrid={showGrid}
         setShowGrid={setShowGrid}
         onSave={handleSave}
-        onExport={handleExport}
         onZoom={handleZoom}
         onUploadImage={handleMainImageUpload}
         hasMainImage={!!mainImage}
-      />
+      >
+        <div className="flex items-center gap-4 mb-4">
+          <ExportButton
+            onExport={handleExport}
+            onBatchExport={handleBatchExport}
+            hasBatchExport={watermarks.length > 0}
+          />
+          {/* Other toolbar buttons */}
+        </div>
+      </Toolbar>
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeTab={activeTab}
@@ -272,9 +354,9 @@ const App = () => {
           elements={elements}
           updateWatermarkPosition={updateWatermarkPosition}
           updateWatermarkProperties={updateWatermarkProperties}
+          removeWatermark={removeWatermark}
           updateElementPosition={updateElementPosition}
           updateElementProperties={updateElementProperties}
-          removeWatermark={removeWatermark}
           removeElement={removeElement}
           onExport={setExportCanvas}
         />
