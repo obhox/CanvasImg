@@ -8,6 +8,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -23,8 +24,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # IDE specific files
-.idea
-.vscode
+.idea/
+.vscode/
 *.swp
 *.swo
 

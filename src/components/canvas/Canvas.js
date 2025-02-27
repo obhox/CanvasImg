@@ -347,16 +347,17 @@ const Canvas = ({
   }, [exportCanvas, onExport]);
 
   return (
-    <div className="flex-1 bg-gray-200 overflow-auto flex flex-col">
-      <div className="flex-1 flex items-center justify-center p-4">
+    <div className="flex-1 bg-gray-200 flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <div
           ref={canvasRef}
-          className="bg-white shadow-lg relative"
+          className="bg-white shadow-lg relative flex-shrink-0"
           style={{
             width: '800px',
             height: '600px',
             transform: `scale(${zoom / 100})`,
-            transformOrigin: 'center center'
+            transformOrigin: 'center center',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
           }}
           onClick={handleCanvasClick}
           onDrop={handleDrop}
@@ -365,11 +366,14 @@ const Canvas = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
+          {/* White background layer */}
+          <div className="absolute inset-0 bg-white" />
+          
           {mainImage && (
             <img
               src={mainImage.url}
               alt={mainImage.name}
-              className="w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover"
             />
           )}
           
