@@ -4,13 +4,17 @@ import Sidebar from './components/sidebar/Sidebar';
 import Canvas from './components/canvas/Canvas';
 import CanvasMenu from './components/canvas/CanvasMenu';
 import ExportButton from './components/ui/ExportButton';
+import LoginPage from './components/auth/LoginPage';
 import { DESIGN_ELEMENTS } from './utils/constants';
+import { useAuth } from './contexts/AuthContext';
+import { saveCanvas, getCanvases, updateCanvas, deleteCanvas, uploadImage, getImageUrl } from './lib/supabase';
 import JSZip from 'jszip';
 import { Trash2 } from 'lucide-react';
 
 const THUMBNAIL_UPDATE_DELAY = 500; // ms
 
 const App = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('text');
   const [selectedElement, setSelectedElement] = useState(null);
   const [selectedWatermark, setSelectedWatermark] = useState(null);
@@ -48,6 +52,25 @@ const App = () => {
   const thumbnailTimeoutRef = useRef(null);
   const [history, setHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
+  const [loading, setLoading] = useState(false);
+
+  // Load user's canvases from Supabase
+  useEffect(() => {
+    const loadCanvases = async () => {
+      if (user) {
+        try {
+          const userCanvases = await getCanvases(user.id);
+          if (userCanvases.length > 0) {
+            setCanvases(userCanvases);
+          }
+        } catch (error) {
+          console.error('Error loading canvases:', error);
+        }
+      }
+    };
+
+    loadCanvases();
+  }, [user]);
 
   // Add function to save state to history
   const saveToHistory = useCallback((newCanvases) => {
@@ -122,45 +145,88 @@ const App = () => {
     return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
   };
 
-  const handleMainImageUpload = (e) => {
+  // Modified handleMainImageUpload to use Supabase storage
+  const handleMainImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Validate file types
+    // Validate file types and sizes
     const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/gif'];
-    const invalidFiles = files.filter(file => !validTypes.includes(file.type));
-    if (invalidFiles.length > 0) {
-      alert('Please upload valid image files (PNG, JPG, JPEG, or SVG)');
-      return;
-    }
-
-    // Create new canvases for each image
-    const newCanvases = files.map(file => {
-      const url = URL.createObjectURL(file);
-      return {
-        id: generateUniqueId(),
-        mainImage: {
-          id: generateUniqueId(),
-          name: file.name,
-          url,
-          file
-        },
-        elements: [],
-        watermarks: [],
-        backgroundColor: '#ffffff'
-      };
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    
+    const invalidFiles = files.filter(file => {
+      if (!validTypes.includes(file.type)) {
+        alert(`Invalid file type: ${file.name}. Please upload PNG, JPG, SVG, or GIF files only.`);
+        return true;
+      }
+      if (file.size > maxSize) {
+        alert(`File too large: ${file.name}. Maximum size is 5MB.`);
+        return true;
+      }
+      return false;
     });
 
-    // If there's only a default empty canvas, replace it
-    if (canvases.length === 1 && !canvases[0].mainImage) {
-      setCanvases(newCanvases);
-    } else {
-      // Otherwise, append new canvases
-      setCanvases(prev => [...prev, ...newCanvases]);
-    }
+    if (invalidFiles.length > 0) return;
 
-    // Set active canvas to the first new one
-    setActiveCanvasIndex(canvases.length === 1 && !canvases[0].mainImage ? 0 : canvases.length);
+    try {
+      // Show loading state
+      setLoading(true);
+
+      // Upload images to Supabase storage and create new canvases
+      const newCanvases = await Promise.all(
+        files.map(async (file) => {
+          try {
+            console.log('Processing file:', file.name);
+            const uploadResult = await uploadImage(file);
+            console.log('Upload result:', uploadResult);
+
+            if (!uploadResult || !uploadResult.url) {
+              throw new Error('Upload failed - no URL returned');
+            }
+
+            const canvas = {
+              id: generateUniqueId(),
+              user_id: user.id,
+              mainImage: {
+                id: generateUniqueId(),
+                name: file.name,
+                url: uploadResult.url,
+                path: uploadResult.path
+              },
+              elements: [],
+              watermarks: [],
+              backgroundColor: '#ffffff'
+            };
+
+            // Save canvas to Supabase database
+            const savedCanvas = await saveCanvas(canvas);
+            console.log('Canvas saved:', savedCanvas);
+            return savedCanvas;
+          } catch (error) {
+            console.error('Error processing file:', file.name, error);
+            throw error;
+          }
+        })
+      );
+
+      // Update local state
+      if (canvases.length === 1 && !canvases[0].mainImage) {
+        setCanvases(newCanvases);
+      } else {
+        setCanvases(prev => [...prev, ...newCanvases]);
+      }
+
+      // Set active canvas to the first new one
+      setActiveCanvasIndex(canvases.length === 1 && !canvases[0].mainImage ? 0 : canvases.length);
+
+      // Show success message
+      alert('Images uploaded successfully!');
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      alert(`Failed to upload images: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCanvasChange = (index) => {
@@ -168,34 +234,37 @@ const App = () => {
     setSelectedElement(null);
   };
 
-  const removeCanvas = (index) => {
-    setCanvases(prev => {
-      const newCanvases = [...prev];
-      // Clean up the URL of the removed canvas
-      const removedCanvas = newCanvases[index];
-      if (removedCanvas.mainImage?.url) {
-        URL.revokeObjectURL(removedCanvas.mainImage.url);
-      }
-      newCanvases.splice(index, 1);
-      
-      // If removing the last canvas, create a new empty one
-      if (newCanvases.length === 0) {
-        newCanvases.push({
-          id: 'default',
-          mainImage: null,
-          elements: [],
-          watermarks: [],
-          backgroundColor: '#ffffff'
-        });
-      }
-      
-      // Adjust active canvas index if necessary
-      if (index <= activeCanvasIndex) {
-        setActiveCanvasIndex(Math.max(0, Math.min(activeCanvasIndex - 1, newCanvases.length - 1)));
-      }
-      
-      return newCanvases;
-    });
+  // Modified removeCanvas to delete from Supabase
+  const removeCanvas = async (index) => {
+    try {
+      const canvas = canvases[index];
+      await deleteCanvas(canvas.id);
+
+      setCanvases(prev => {
+        const newCanvases = [...prev];
+        newCanvases.splice(index, 1);
+        
+        if (newCanvases.length === 0) {
+          newCanvases.push({
+            id: 'default',
+            user_id: user.id,
+            mainImage: null,
+            elements: [],
+            watermarks: [],
+            backgroundColor: '#ffffff'
+          });
+        }
+        
+        if (index <= activeCanvasIndex) {
+          setActiveCanvasIndex(Math.max(0, Math.min(activeCanvasIndex - 1, newCanvases.length - 1)));
+        }
+        
+        return newCanvases;
+      });
+    } catch (error) {
+      console.error('Error removing canvas:', error);
+      alert('Failed to remove canvas. Please try again.');
+    }
   };
 
   const activeCanvas = canvases[activeCanvasIndex];
@@ -581,7 +650,8 @@ const App = () => {
     }
   }, [canvases, activeCanvasIndex, exportFunction]);
 
-  const handleSave = () => {
+  // Modified handleSave to save to Supabase
+  const handleSave = async () => {
     try {
       const savedData = {
         canvases,
@@ -590,15 +660,16 @@ const App = () => {
         showGrid
       };
       
-      const dataStr = JSON.stringify(savedData);
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-      
-      const exportName = 'canvas-template.json';
-      
-      const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
-      linkElement.setAttribute('download', exportName);
-      linkElement.click();
+      // Update the active canvas in Supabase
+      await updateCanvas(activeCanvas.id, {
+        ...activeCanvas,
+        settings: {
+          zoom,
+          showGrid
+        }
+      });
+
+      alert('Canvas saved successfully!');
     } catch (error) {
       console.error('Error saving template:', error);
       alert('Failed to save template. Please try again.');
@@ -756,6 +827,11 @@ const App = () => {
     };
   }, []);
 
+  // If user is not authenticated, show login page
+  if (!user) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-100">
       <Toolbar
@@ -770,6 +846,7 @@ const App = () => {
         onBatchExport={handleBatchExport}
         hasBatchExport={canvases.length > 1}
         canvasCount={canvases.length}
+        loading={loading}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={currentHistoryIndex > 0}

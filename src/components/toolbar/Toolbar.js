@@ -18,6 +18,7 @@ const Toolbar = ({
   onBatchExport,
   hasBatchExport,
   canvasCount,
+  loading,
   onUndo,
   onRedo,
   canUndo,
@@ -76,9 +77,15 @@ const Toolbar = ({
         </Button>
 
         <div className="flex items-center space-x-2">
-          <label className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 cursor-pointer flex items-center">
+          <label 
+            className={`px-3 py-1.5 ${
+              loading 
+                ? 'bg-blue-400 cursor-not-allowed' 
+                : 'bg-blue-500 hover:bg-blue-600 cursor-pointer'
+            } text-white rounded-lg flex items-center`}
+          >
             <Upload size={16} className="mr-2" />
-            Upload Image{canvasCount > 0 ? 's' : ''}
+            {loading ? 'Uploading...' : `Upload Image${canvasCount > 0 ? 's' : ''}`}
             <input
               type="file"
               ref={fileInputRef}
@@ -86,6 +93,7 @@ const Toolbar = ({
               accept="image/*"
               onChange={onUploadImage}
               multiple
+              disabled={loading}
             />
           </label>
         </div>
