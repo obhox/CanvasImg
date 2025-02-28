@@ -17,7 +17,9 @@ const Canvas = ({
   removeElement,
   onExport,
   onElementSelect,
-  onWatermarkSelect
+  onWatermarkSelect,
+  showGrid,
+  backgroundColor
 }) => {
   const [selectedWatermark, setSelectedWatermark] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
@@ -25,6 +27,7 @@ const Canvas = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [draggingType, setDraggingType] = useState(null); // 'watermark' or 'element'
   const [editingText, setEditingText] = useState(null);
+  const [isCanvasSelected, setIsCanvasSelected] = useState(false);
 
   // Available fonts
   const fontOptions = [
@@ -96,8 +99,9 @@ const Canvas = ({
     if (e.target === canvasRef.current) {
       setSelectedWatermark(null);
       setSelectedElement(null);
-      onElementSelect?.(null);
+      onElementSelect?.({ type: 'canvas', color: backgroundColor });
       onWatermarkSelect?.(null);
+      setIsCanvasSelected(true);
     }
   };
 
@@ -247,30 +251,118 @@ const Canvas = ({
                 ctx.fillStyle = element.color;
                 const scaledWidth = element.size.width * scaleX;
                 const scaledHeight = element.size.height * scaleY;
+                
+                // Save the current context state
+                ctx.save();
+                
+                // Center the shape in its bounding box
+                ctx.translate(scaledWidth / 2, scaledHeight / 2);
+                
                 switch (element.shape) {
                   case 'rectangle':
-                    ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+                    ctx.fillRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
                     break;
+                    
                   case 'circle':
                     ctx.beginPath();
-                    ctx.arc(
-                      scaledWidth / 2,
-                      scaledHeight / 2,
-                      scaledWidth / 2,
-                      0,
-                      Math.PI * 2
-                    );
+                    ctx.arc(0, 0, scaledWidth / 2, 0, Math.PI * 2);
                     ctx.fill();
                     break;
+                    
                   case 'triangle':
                     ctx.beginPath();
-                    ctx.moveTo(scaledWidth / 2, 0);
-                    ctx.lineTo(scaledWidth, scaledHeight);
-                    ctx.lineTo(0, scaledHeight);
+                    ctx.moveTo(0, -scaledHeight / 2);
+                    ctx.lineTo(scaledWidth / 2, scaledHeight / 2);
+                    ctx.lineTo(-scaledWidth / 2, scaledHeight / 2);
                     ctx.closePath();
                     ctx.fill();
                     break;
+                    
+                  case 'star':
+                    ctx.beginPath();
+                    const spikes = 5;
+                    const outerRadius = scaledWidth / 2;
+                    const innerRadius = outerRadius * 0.4;
+                    for (let i = 0; i < spikes * 2; i++) {
+                      const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                      const angle = (i * Math.PI) / spikes;
+                      if (i === 0) {
+                        ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      } else {
+                        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      }
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                  case 'hexagon':
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                      const angle = (i * Math.PI) / 3;
+                      const radius = scaledWidth / 2;
+                      if (i === 0) {
+                        ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      } else {
+                        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      }
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                  case 'pentagon':
+                    ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                      const angle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+                      const radius = scaledWidth / 2;
+                      if (i === 0) {
+                        ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      } else {
+                        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      }
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                  case 'octagon':
+                    ctx.beginPath();
+                    for (let i = 0; i < 8; i++) {
+                      const angle = (i * Math.PI) / 4;
+                      const radius = scaledWidth / 2;
+                      if (i === 0) {
+                        ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      } else {
+                        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                      }
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                  case 'diamond':
+                    ctx.beginPath();
+                    ctx.moveTo(0, -scaledHeight / 2);
+                    ctx.lineTo(scaledWidth / 2, 0);
+                    ctx.lineTo(0, scaledHeight / 2);
+                    ctx.lineTo(-scaledWidth / 2, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                  case 'line':
+                    ctx.beginPath();
+                    ctx.lineWidth = 4 * Math.min(scaleX, scaleY);
+                    ctx.strokeStyle = element.color || '#000000';
+                    ctx.moveTo(-scaledWidth / 2, 0);
+                    ctx.lineTo(scaledWidth / 2, 0);
+                    ctx.stroke();
+                    break;
                 }
+                
+                // Restore the context state
+                ctx.restore();
               }
               ctx.restore();
             }
@@ -333,6 +425,11 @@ const Canvas = ({
     }
   }, [exportCanvas, onExport]);
 
+  // Add function to update canvas background color
+  const updateCanvasBackground = (color) => {
+    // This function is no longer used in the new implementation
+  };
+
   return (
     <div className="flex-1 bg-gray-200 flex items-center justify-center">
       <div className="flex items-center justify-center">
@@ -344,7 +441,8 @@ const Canvas = ({
             height: '600px',
             transform: `scale(${zoom / 100})`,
             transformOrigin: 'center center',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            backgroundColor: backgroundColor
           }}
           onClick={handleCanvasClick}
           onDrop={handleDrop}
@@ -353,8 +451,18 @@ const Canvas = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          {/* White background layer */}
-          <div className="absolute inset-0 bg-white" />
+          {/* Grid Layer */}
+          {showGrid && (
+            <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
+              <div className="w-full h-full" style={{
+                backgroundImage: `
+                  linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                  linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+                `,
+                backgroundSize: '20px 20px'
+              }} />
+            </div>
+          )}
           
           {mainImage && (
             <img
@@ -396,7 +504,9 @@ const Canvas = ({
                       style={{
                         fontSize: `${element.fontSize}px`,
                         fontFamily: element.fontFamily || 'Arial, sans-serif',
-                        fontWeight: element.fontWeight,
+                        fontWeight: element.fontWeight || 'normal',
+                        fontStyle: element.fontStyle || 'normal',
+                        textDecoration: element.textDecoration || 'none',
                         color: element.color,
                         opacity: element.opacity || 1,
                         width: 'auto',
@@ -409,11 +519,14 @@ const Canvas = ({
                       style={{
                         fontSize: `${element.fontSize}px`,
                         fontFamily: element.fontFamily || 'Arial, sans-serif',
-                        fontWeight: element.fontWeight,
+                        fontWeight: element.fontWeight || 'normal',
+                        fontStyle: element.fontStyle || 'normal',
+                        textDecoration: element.textDecoration || 'none',
                         color: element.color,
                         opacity: element.opacity || 1,
                         whiteSpace: 'nowrap',
-                        userSelect: 'none'
+                        userSelect: 'none',
+                        textAlign: element.textAlign || 'left'
                       }}
                     >
                       {element.text}
@@ -435,7 +548,7 @@ const Canvas = ({
                       opacity: element.opacity || 1
                     }}
                   />
-                ) : element.shape === 'triangle' && (
+                ) : element.shape === 'triangle' ? (
                   <div className="w-full h-full overflow-hidden">
                     <div
                       className="w-0 h-0"
@@ -447,6 +560,14 @@ const Canvas = ({
                       }}
                     />
                   </div>
+                ) : (
+                  <div 
+                    className={`w-full h-full ${element.shape}-shape`}
+                    style={{ 
+                      backgroundColor: element.color || '#3B82F6',
+                      opacity: element.opacity || 1
+                    }}
+                  />
                 )}
               </div>
             ))}

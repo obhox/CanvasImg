@@ -41,7 +41,37 @@ const CanvasMenu = ({
     'Times New Roman, serif',
     'Courier New, monospace',
     'Georgia, serif',
-    'Verdana, sans-serif'
+    'Verdana, sans-serif',
+    'Roboto, sans-serif',
+    'Open Sans, sans-serif',
+    'Lato, sans-serif',
+    'Montserrat, sans-serif',
+    'Poppins, sans-serif',
+    'Playfair Display, serif',
+    'Merriweather, serif',
+    'Source Sans Pro, sans-serif',
+    'Ubuntu, sans-serif',
+    'Oswald, sans-serif',
+    'Raleway, sans-serif',
+    'PT Sans, sans-serif',
+    'Nunito, sans-serif',
+    'Quicksand, sans-serif',
+    'Josefin Sans, sans-serif',
+    'Dancing Script, cursive',
+    'Pacifico, cursive',
+    'Caveat, cursive',
+    'Indie Flower, cursive',
+    'Shadows Into Light, cursive',
+    'Permanent Marker, cursive',
+    'Architects Daughter, cursive',
+    'Satisfy, cursive',
+    'Great Vibes, cursive',
+    'Sacramento, cursive',
+    'Lobster, cursive',
+    'Comfortaa, cursive',
+    'Righteous, sans-serif',
+    'Abril Fatface, cursive',
+    'Bebas Neue, sans-serif'
   ];
 
   const fontSizes = [12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64];
@@ -49,7 +79,7 @@ const CanvasMenu = ({
   if (!selectedElement && !selectedWatermark) {
     return (
       <div className="h-12 bg-white border-b border-border flex items-center px-4 gap-2">
-        <div className="text-sm text-muted-foreground">Select an element to edit</div>
+        <div className="text-sm text-muted-foreground">Click the canvas or an element to edit</div>
       </div>
     );
   }
@@ -59,19 +89,25 @@ const CanvasMenu = ({
   };
 
   const handleFontStyle = (style) => {
-    const newStyles = { ...selectedElement };
+    if (!selectedElement) return;
+    
     switch (style) {
       case 'bold':
-        newStyles.fontWeight = newStyles.fontWeight === 'bold' ? 'normal' : 'bold';
+        updateElementProperties(selectedElement.id, {
+          fontWeight: selectedElement.fontWeight === 'bold' ? 'normal' : 'bold'
+        });
         break;
       case 'italic':
-        newStyles.fontStyle = newStyles.fontStyle === 'italic' ? 'normal' : 'italic';
+        updateElementProperties(selectedElement.id, {
+          fontStyle: selectedElement.fontStyle === 'italic' ? 'normal' : 'italic'
+        });
         break;
       case 'underline':
-        newStyles.textDecoration = newStyles.textDecoration === 'underline' ? 'none' : 'underline';
+        updateElementProperties(selectedElement.id, {
+          textDecoration: selectedElement.textDecoration === 'underline' ? 'none' : 'underline'
+        });
         break;
     }
-    updateElementProperties(selectedElement.id, newStyles);
   };
 
   const handleOpacityChange = (value) => {
@@ -122,23 +158,44 @@ const CanvasMenu = ({
     <div className="bg-white border-b border-border">
       {/* Common Controls */}
       <div className="h-12 flex items-center px-4 gap-2">
-        {/* Scale Controls */}
-        <div className="flex items-center gap-1 border-r border-border pr-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => adjustProperty('scale', -0.1)}
-          >
-            <Minus size={16} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => adjustProperty('scale', 0.1)}
-          >
-            <Plus size={16} />
-          </Button>
-        </div>
+        {/* Color Control - For canvas background or elements */}
+        {selectedElement && (
+          <div className="flex items-center gap-2 border-r border-border pr-2">
+            <input
+              type="color"
+              value={selectedElement.type === 'canvas' ? selectedElement.color : (selectedElement.color || '#000000')}
+              onChange={(e) => {
+                if (selectedElement.type === 'canvas') {
+                  updateElementProperties(null, { color: e.target.value });
+                } else {
+                  updateElementProperties(selectedElement.id, { color: e.target.value });
+                }
+              }}
+              className="w-8 h-8 p-1 border rounded cursor-pointer"
+            />
+            <span className="text-sm">{selectedElement.type === 'canvas' ? 'Background Color' : 'Color'}</span>
+          </div>
+        )}
+
+        {/* Scale Controls - Only show for non-canvas elements */}
+        {selectedElement && selectedElement.type !== 'canvas' && (
+          <div className="flex items-center gap-1 border-r border-border pr-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => adjustProperty('scale', -0.1)}
+            >
+              <Minus size={16} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => adjustProperty('scale', 0.1)}
+            >
+              <Plus size={16} />
+            </Button>
+          </div>
+        )}
 
         {/* Rotation Controls */}
         <div className="flex items-center gap-1 border-r border-border pr-2">
@@ -238,19 +295,6 @@ const CanvasMenu = ({
               </Button>
             </div>
           </>
-        )}
-
-        {/* Color Control - Only for elements, not watermarks */}
-        {selectedElement && (
-          <div className="flex items-center gap-2 border-r border-border pr-2">
-            <input
-              type="color"
-              value={selectedElement.color || '#000000'}
-              onChange={(e) => updateElementProperties(selectedElement.id, { color: e.target.value })}
-              className="w-8 h-8 p-1 border rounded cursor-pointer"
-            />
-            <span className="text-sm">Color</span>
-          </div>
         )}
 
         {/* Transparency Control */}

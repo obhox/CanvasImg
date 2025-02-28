@@ -15,7 +15,7 @@ const App = () => {
   const [selectedElement, setSelectedElement] = useState(null);
   const [selectedWatermark, setSelectedWatermark] = useState(null);
   const [zoom, setZoom] = useState(100);
-  const [showGrid, setShowGrid] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
   const [uploadedImages, setUploadedImages] = useState([]);
   const [canvases, setCanvases] = useState(() => {
     try {
@@ -25,7 +25,8 @@ const App = () => {
           id: 'default',
           mainImage: null,
           elements: [],
-          watermarks: []
+          watermarks: [],
+          backgroundColor: '#ffffff'
         }
       ];
     } catch (error) {
@@ -34,7 +35,8 @@ const App = () => {
         id: 'default',
         mainImage: null,
         elements: [],
-        watermarks: []
+        watermarks: [],
+        backgroundColor: '#ffffff'
       }];
     }
   });
@@ -44,15 +46,70 @@ const App = () => {
   const [thumbnails, setThumbnails] = useState({});
   const thumbnailCanvasRef = useRef(document.createElement('canvas'));
   const thumbnailTimeoutRef = useRef(null);
+  const [history, setHistory] = useState([]);
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
 
-  // Save canvases to localStorage whenever they change
+  // Add function to save state to history
+  const saveToHistory = useCallback((newCanvases) => {
+    setHistory(prev => {
+      // Remove any future states if we're not at the latest state
+      const newHistory = prev.slice(0, currentHistoryIndex + 1);
+      // Add new state, ensure it's a valid JSON string
+      const jsonState = JSON.stringify(newCanvases);
+      if (jsonState === prev[prev.length - 1]) {
+        return prev; // Don't add duplicate states
+      }
+      return [...newHistory, jsonState];
+    });
+    setCurrentHistoryIndex(prev => prev + 1);
+  }, [currentHistoryIndex]);
+
+  // Add undo function
+  const handleUndo = useCallback(() => {
+    if (currentHistoryIndex > 0) {
+      const newIndex = currentHistoryIndex - 1;
+      setCurrentHistoryIndex(newIndex);
+      const previousState = JSON.parse(history[newIndex]);
+      if (previousState) {
+        setCanvases(previousState);
+      }
+    }
+  }, [currentHistoryIndex, history]);
+
+  // Add redo function
+  const handleRedo = useCallback(() => {
+    if (currentHistoryIndex < history.length - 1) {
+      const newIndex = currentHistoryIndex + 1;
+      setCurrentHistoryIndex(newIndex);
+      const nextState = JSON.parse(history[newIndex]);
+      if (nextState) {
+        setCanvases(nextState);
+      }
+    }
+  }, [currentHistoryIndex, history]);
+
+  // Modify the useEffect that saves to localStorage to also save to history
   useEffect(() => {
     try {
-      localStorage.setItem('canvases', JSON.stringify(canvases));
+      const canvasesJson = JSON.stringify(canvases);
+      localStorage.setItem('canvases', canvasesJson);
+      // Don't save to history if the change was from undo/redo
+      if (!history[currentHistoryIndex] || canvasesJson !== history[currentHistoryIndex]) {
+        saveToHistory(canvases);
+      }
     } catch (error) {
-      console.error('Error saving canvases to localStorage:', error);
+      console.error('Error saving canvases:', error);
     }
-  }, [canvases]);
+  }, [canvases, saveToHistory, history, currentHistoryIndex]);
+
+  // Initialize history with initial state
+  useEffect(() => {
+    if (history.length === 0 && canvases.length > 0) {
+      const initialState = JSON.stringify(canvases);
+      setHistory([initialState]);
+      setCurrentHistoryIndex(0);
+    }
+  }, []);
 
   const handleDragStart = (e, element) => {
     e.dataTransfer.setData('application/json', JSON.stringify({
@@ -89,7 +146,8 @@ const App = () => {
           file
         },
         elements: [],
-        watermarks: []
+        watermarks: [],
+        backgroundColor: '#ffffff'
       };
     });
 
@@ -126,7 +184,8 @@ const App = () => {
           id: 'default',
           mainImage: null,
           elements: [],
-          watermarks: []
+          watermarks: [],
+          backgroundColor: '#ffffff'
         });
       }
       
@@ -355,13 +414,39 @@ const App = () => {
     });
   };
 
-  const updateElementProperties = (id, properties) => {
+  const updateCanvasProperties = (properties) => {
     setCanvases(prev => {
       const newCanvases = [...prev];
       const canvas = newCanvases[activeCanvasIndex];
-      canvas.elements = canvas.elements.map(el => 
-        el.id === id ? { ...el, ...properties } : el
-      );
+      Object.assign(canvas, properties);
+      return newCanvases;
+    });
+  };
+
+  const updateElementProperties = (id, properties) => {
+    if (id === null && properties.color) {
+      // Update canvas background color
+      setCanvases(prev => {
+        const newCanvases = [...prev];
+        newCanvases[activeCanvasIndex] = {
+          ...newCanvases[activeCanvasIndex],
+          backgroundColor: properties.color
+        };
+        return newCanvases;
+      });
+      return;
+    }
+    
+    setCanvases(prev => {
+      const newCanvases = [...prev];
+      const canvas = newCanvases[activeCanvasIndex];
+      const elementIndex = canvas.elements.findIndex(e => e.id === id);
+      if (elementIndex !== -1) {
+        canvas.elements[elementIndex] = {
+          ...canvas.elements[elementIndex],
+          ...properties
+        };
+      }
       return newCanvases;
     });
   };
@@ -685,6 +770,10 @@ const App = () => {
         onBatchExport={handleBatchExport}
         hasBatchExport={canvases.length > 1}
         canvasCount={canvases.length}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={currentHistoryIndex > 0}
+        canRedo={currentHistoryIndex < history.length - 1}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
@@ -700,7 +789,7 @@ const App = () => {
         />
         <div className="flex flex-col flex-1">
           <CanvasMenu
-            selectedElement={selectedElement}
+            selectedElement={selectedElement?.type === 'canvas' ? { type: 'canvas', color: activeCanvas.backgroundColor } : selectedElement}
             selectedWatermark={selectedWatermark}
             watermarks={activeCanvas.watermarks}
             updateElementProperties={updateElementProperties}
@@ -717,13 +806,14 @@ const App = () => {
                 height: '100%'
               }}
             >
-              <div className="relative flex-shrink-0 bg-white" style={{
+              <div className="relative flex-shrink-0" style={{
                 width: '800px',
                 height: '600px',
                 transform: `scale(${zoom / 100})`,
                 transformOrigin: 'center',
                 transition: 'transform 0.2s ease-out',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                backgroundColor: activeCanvas.backgroundColor
               }}>
                 <div className="absolute inset-0 bg-white" />
                 <div className="absolute top-2 right-2 z-50 flex gap-2">
@@ -755,6 +845,8 @@ const App = () => {
                   onExport={setExportFunctionCallback}
                   onElementSelect={setSelectedElement}
                   onWatermarkSelect={setSelectedWatermark}
+                  showGrid={showGrid}
+                  backgroundColor={activeCanvas.backgroundColor}
                 />
               </div>
             </div>

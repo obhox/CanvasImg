@@ -18,6 +18,10 @@ const Toolbar = ({
   onBatchExport,
   hasBatchExport,
   canvasCount,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   children
 }) => {
   const fileInputRef = useRef(null);
@@ -29,11 +33,23 @@ const Toolbar = ({
   return (
     <div className="bg-card border-b border-border p-2 flex justify-between items-center">
       <div className="flex space-x-2">
-        <Button variant="ghost" size="icon">
-          <Undo size={18} />
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo"
+        >
+          <Undo size={18} className={canUndo ? 'text-primary' : 'text-muted-foreground'} />
         </Button>
-        <Button variant="ghost" size="icon">
-          <Redo size={18} />
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Redo"
+        >
+          <Redo size={18} className={canRedo ? 'text-primary' : 'text-muted-foreground'} />
         </Button>
         <div className="h-6 w-px bg-border mx-1"></div>
         <Button variant="ghost" size="icon">

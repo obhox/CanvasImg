@@ -1,3 +1,125 @@
+/* Google Fonts Import */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Playfair+Display:wght@400;700&family=Merriweather:wght@400;700&family=Source+Sans+Pro:wght@400;700&family=Ubuntu:wght@400;700&family=Oswald:wght@400;700&family=Raleway:wght@400;700&family=PT+Sans:wght@400;700&family=Nunito:wght@400;700&family=Quicksand:wght@400;700&family=Josefin+Sans:wght@400;700&family=Dancing+Script&family=Pacifico&family=Caveat&family=Indie+Flower&family=Shadows+Into+Light&family=Permanent+Marker&family=Architects+Daughter&family=Satisfy&family=Great+Vibes&family=Sacramento&family=Lobster&family=Comfortaa:wght@400;700&family=Righteous&family=Abril+Fatface&family=Bebas+Neue&display=swap');
+
+/* Custom Shape Styles */
+.rectangle-shape {
+  /* Rectangle is handled by default div styling */
+}
+
+.circle-shape {
+  border-radius: 50%;
+}
+
+.triangle-shape {
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
+
+.star-shape {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+.hexagon-shape {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+}
+
+.pentagon-shape {
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+}
+
+.octagon-shape {
+  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+}
+
+.diamond-shape {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.line-shape {
+  height: 4px !important;
+  background-color: currentColor;
+  transform-origin: center center;
+}
+
+.parallelogram-shape {
+  transform: skew(-20deg);
+}
+
+.trapezoid-shape {
+  clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+}
+
+.arrow-shape {
+  clip-path: polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%);
+}
+
+.cross-shape {
+  clip-path: polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%);
+}
+
+.burst-shape {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+.cloud-shape {
+  clip-path: path('M25 5 C15 5 5 15 5 25 C5 35 15 45 25 45 C35 45 45 35 45 25 C45 15 35 5 25 5 Z');
+}
+
+.moon-shape {
+  clip-path: path('M15 5 C15 25 35 25 35 25 C35 5 15 5 15 5 Z');
+}
+
+.drop-shape {
+  clip-path: path('M50 0 C50 50 100 50 50 100 C0 50 50 50 50 0 Z');
+}
+
+.wave-shape {
+  clip-path: path('M0 35 C20 35 20 65 40 65 C60 65 60 35 80 35 C100 35 100 65 120 65 L120 100 L0 100 Z');
+}
+
+.puzzle-shape {
+  clip-path: path('M20 0 L80 0 L100 20 L100 80 L80 100 L20 100 L0 80 L0 20 Z');
+}
+
+.shield-shape {
+  clip-path: path('M50 0 L100 25 L100 75 L50 100 L0 75 L0 25 Z');
+}
+
+.ribbon-shape {
+  clip-path: path('M50 0 L90 20 L90 80 L50 100 L10 80 L10 20 Z M50 20 L70 30 L70 70 L50 80 L30 70 L30 30 Z');
+}
+
+.infinity-shape {
+  clip-path: path('M25 40 C35 40 35 60 45 60 C55 60 55 40 65 40 C75 40 75 60 85 60');
+}
+
+.message-shape {
+  clip-path: path('M10 0 L90 0 L90 70 L50 70 L40 85 L30 70 L10 70 Z');
+}
+
+/* Shape Grid Layout */
+.shapes-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.shape-item {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f3f4f6;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.shape-item:hover {
+  background-color: #e5e7eb;
+  transform: scale(1.05);
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

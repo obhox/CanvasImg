@@ -127,18 +127,15 @@ const Sidebar = ({
           )}
 
           {activeTab === 'shapes' && (
-            <div className="space-y-2">
+            <div className="shapes-grid">
               {designElements.shapes?.map((element) => (
                 <div
                   key={element.id}
-                  className="p-3 bg-accent/50 rounded-lg cursor-move hover:bg-accent"
+                  className="shape-item"
                   draggable
                   onDragStart={(e) => handleDragStart(e, element)}
                 >
-                  <div className="flex items-center space-x-2">
-                    {element.icon}
-                    <span className="text-sm">{element.name}</span>
-                  </div>
+                  {element.icon}
                 </div>
               ))}
             </div>
