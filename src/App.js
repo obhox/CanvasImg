@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Toolbar from './components/toolbar/Toolbar';
 import Sidebar from './components/sidebar/Sidebar';
 import Canvas from './components/canvas/Canvas';
+import CanvasMenu from './components/canvas/CanvasMenu';
 import ExportButton from './components/ui/ExportButton';
 import { DESIGN_ELEMENTS } from './utils/constants';
 import JSZip from 'jszip';
@@ -10,10 +11,12 @@ import { Trash2 } from 'lucide-react';
 const THUMBNAIL_UPDATE_DELAY = 500; // ms
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState('watermarks');
+  const [activeTab, setActiveTab] = useState('text');
   const [selectedElement, setSelectedElement] = useState(null);
+  const [selectedWatermark, setSelectedWatermark] = useState(null);
   const [zoom, setZoom] = useState(100);
   const [showGrid, setShowGrid] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState([]);
   const [canvases, setCanvases] = useState(() => {
     try {
       const savedCanvases = localStorage.getItem('canvases');
@@ -37,7 +40,7 @@ const App = () => {
   });
   const [activeCanvasIndex, setActiveCanvasIndex] = useState(0);
   const canvasRef = useRef(null);
-  const [exportCanvas, setExportCanvas] = useState(null);
+  const [exportFunction, setExportFunction] = useState(null);
   const [thumbnails, setThumbnails] = useState({});
   const thumbnailCanvasRef = useRef(document.createElement('canvas'));
   const thumbnailTimeoutRef = useRef(null);
@@ -58,6 +61,10 @@ const App = () => {
     }));
   };
 
+  const generateUniqueId = () => {
+    return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  };
+
   const handleMainImageUpload = (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -74,9 +81,9 @@ const App = () => {
     const newCanvases = files.map(file => {
       const url = URL.createObjectURL(file);
       return {
-        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        id: generateUniqueId(),
         mainImage: {
-          id: Date.now(),
+          id: generateUniqueId(),
           name: file.name,
           url,
           file
@@ -145,50 +152,78 @@ const App = () => {
       setCanvases(prev => {
         const newCanvases = [...prev];
         const canvas = newCanvases[activeCanvasIndex];
+        const newId = generateUniqueId();
 
         switch (element.type) {
           case 'text':
-            canvas.elements = [...canvas.elements, {
-              id: Date.now(),
-              type: 'text',
-              ...element,
-              position: { x, y },
-              text: element.name,
-              fontSize: element.fontSize || 24,
-              fontFamily: element.fontFamily || 'Arial, sans-serif',
-              fontWeight: element.fontWeight || 'normal',
-              color: element.color || '#000000',
-              scale: 1,
-              rotation: 0
-            }];
+            // Check if text already exists
+            const textExists = canvas.elements.some(el => 
+              el.type === 'text' && el.text === element.name && 
+              el.position.x === x && el.position.y === y
+            );
+            if (!textExists) {
+              canvas.elements = [...canvas.elements, {
+                id: newId,
+                type: 'text',
+                position: { x, y },
+                text: element.name,
+                fontSize: element.fontSize || 24,
+                fontFamily: element.fontFamily || 'Arial, sans-serif',
+                fontWeight: element.fontWeight || 'normal',
+                color: element.color || '#000000',
+                scale: 1,
+                rotation: 0
+              }];
+            }
             break;
           case 'shape':
-            const defaultColors = {
-              rectangle: '#3B82F6',
-              circle: '#22C55E',
-              triangle: '#F59E0B'
-            };
-            canvas.elements = [...canvas.elements, {
-              id: Date.now(),
-              ...element,
-              position: { x, y },
-              size: { width: 100, height: 100 },
-              color: element.color || defaultColors[element.shape] || '#3B82F6',
-              scale: 1,
-              rotation: 0
-            }];
+            // Check if shape already exists
+            const shapeExists = canvas.elements.some(el =>
+              el.type === 'shape' && el.shape === element.shape &&
+              el.position.x === x && el.position.y === y
+            );
+            if (!shapeExists) {
+              const defaultColors = {
+                rectangle: '#3B82F6',
+                circle: '#22C55E',
+                triangle: '#F59E0B'
+              };
+              canvas.elements = [...canvas.elements, {
+                id: newId,
+                type: 'shape',
+                shape: element.shape,
+                position: { x, y },
+                size: { width: 100, height: 100 },
+                color: element.color || defaultColors[element.shape] || '#3B82F6',
+                scale: 1,
+                rotation: 0
+              }];
+            }
             break;
           case 'image':
-            canvas.watermarks = [...canvas.watermarks, {
-              id: Date.now(),
-              type: 'image',
-              url: element.url,
-              name: element.name || 'Watermark Image',
-              position: { x, y },
-              scale: 1,
-              opacity: 1,
-              rotation: 0
-            }];
+            // Find the image in uploadedImages
+            const imageRef = uploadedImages.find(img => img.id === element.imageId);
+            if (imageRef) {
+              // Check if this image is already on the canvas
+              const isAlreadyOnCanvas = canvas.watermarks.some(
+                w => w.imageId === imageRef.id &&
+                w.position.x === x && w.position.y === y
+              );
+
+              if (!isAlreadyOnCanvas) {
+                canvas.watermarks = [...canvas.watermarks, {
+                  id: newId,
+                  type: 'image',
+                  imageId: imageRef.id,
+                  url: imageRef.url,
+                  name: imageRef.name,
+                  position: { x, y },
+                  scale: 1,
+                  opacity: 1,
+                  rotation: 0
+                }];
+              }
+            }
             break;
         }
 
@@ -211,50 +246,102 @@ const App = () => {
   };
 
   const handleWatermarkUpload = (imageData) => {
-    setCanvases(prev => {
-      const newCanvases = [...prev];
-      const canvas = newCanvases[activeCanvasIndex];
-      
-      // Get the center of the canvas for initial positioning
-      const canvasElement = canvasRef.current;
-      const rect = canvasElement.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
+    // Check if image already exists
+    const existingImage = uploadedImages.find(img => img.url === imageData);
+    
+    // Create the watermark object with position at canvas center
+    const canvasElement = canvasRef.current;
+    const rect = canvasElement.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
 
-      canvas.watermarks = [...canvas.watermarks, {
-        id: Date.now(),
-        type: 'image',
+    if (existingImage) {
+      // If image exists, check if it's already on the canvas
+      const isAlreadyOnCanvas = canvases[activeCanvasIndex].watermarks.some(
+        w => w.imageId === existingImage.id
+      );
+
+      if (isAlreadyOnCanvas) {
+        return; // Don't add if already on canvas
+      }
+
+      // Add new watermark reference
+      setCanvases(prev => {
+        const newCanvases = [...prev];
+        const canvas = newCanvases[activeCanvasIndex];
+        
+        // Check if a watermark already exists at this position
+        const positionTaken = canvas.watermarks.some(w => 
+          w.position.x === centerX - 50 && w.position.y === centerY - 50
+        );
+
+        // If position is taken, offset the new watermark slightly
+        const position = positionTaken ? {
+          x: centerX - 50 + 20,
+          y: centerY - 50 + 20
+        } : {
+          x: centerX - 50,
+          y: centerY - 50
+        };
+        
+        canvas.watermarks = [...canvas.watermarks, {
+          id: generateUniqueId(),
+          type: 'image',
+          imageId: existingImage.id,
+          url: existingImage.url,
+          name: existingImage.name,
+          position,
+          scale: 1,
+          opacity: 1,
+          rotation: 0
+        }];
+
+        return newCanvases;
+      });
+    } else {
+      // If image doesn't exist, create new image and watermark
+      const newImageId = generateUniqueId();
+      const newImage = {
+        id: newImageId,
         url: imageData,
-        name: 'Watermark Image',
-        position: { x: centerX - 50, y: centerY - 50 },
-        scale: 1,
-        opacity: 1,
-        rotation: 0
-      }];
+        name: 'Uploaded Image'
+      };
 
-      return newCanvases;
-    });
-  };
+      setUploadedImages(prev => [...prev, newImage]);
+      
+      setCanvases(prev => {
+        const newCanvases = [...prev];
+        const canvas = newCanvases[activeCanvasIndex];
+        
+        // Check if a watermark already exists at this position
+        const positionTaken = canvas.watermarks.some(w => 
+          w.position.x === centerX - 50 && w.position.y === centerY - 50
+        );
 
-  const handleTextWatermarkAdd = (textWatermark) => {
-    setCanvases(prev => {
-      const newCanvases = [...prev];
-      const canvas = newCanvases[activeCanvasIndex];
+        // If position is taken, offset the new watermark slightly
+        const position = positionTaken ? {
+          x: centerX - 50 + 20,
+          y: centerY - 50 + 20
+        } : {
+          x: centerX - 50,
+          y: centerY - 50
+        };
+        
+        canvas.watermarks = [...canvas.watermarks, {
+          id: generateUniqueId(),
+          type: 'image',
+          imageId: newImageId,
+          url: newImage.url,
+          name: newImage.name,
+          position,
+          scale: 1,
+          opacity: 1,
+          rotation: 0
+        }];
 
-      canvas.watermarks = [...canvas.watermarks, {
-        id: Date.now(),
-        type: 'text',
-        ...textWatermark,
-        position: { x: 50, y: 50 },
-        fontSize: textWatermark.fontSize || 24,
-        fontFamily: textWatermark.fontFamily || 'Arial, sans-serif',
-        color: textWatermark.color || '#000000',
-        scale: 1,
-        rotation: 0
-      }];
-
-      return newCanvases;
-    });
+        return newCanvases;
+      });
+    }
   };
 
   const updateElementPosition = (id, position) => {
@@ -323,32 +410,48 @@ const App = () => {
     setCanvases(prev => {
       const newCanvases = [...prev];
       const canvas = newCanvases[activeCanvasIndex];
-      const watermark = canvas.watermarks.find(w => w.id === id);
-      if (watermark?.url) {
-        try {
-          const url = new URL(watermark.url);
-          if (url.protocol === 'blob:') {
-            URL.revokeObjectURL(watermark.url);
-          }
-        } catch (e) {
-          console.error('Error cleaning up watermark URL:', e);
-        }
-      }
       canvas.watermarks = canvas.watermarks.filter(w => w.id !== id);
       return newCanvases;
     });
   };
 
-  const handleBatchExport = async () => {
-    if (!exportCanvas) {
-      alert('Canvas is not ready for export');
+  const removeUploadedImage = (imageId) => {
+    // Remove the image from uploadedImages
+    setUploadedImages(prev => prev.filter(img => img.id !== imageId));
+    
+    // Remove all watermarks that use this image
+    setCanvases(prev => {
+      return prev.map(canvas => ({
+        ...canvas,
+        watermarks: canvas.watermarks.filter(w => w.imageId !== imageId)
+      }));
+    });
+  };
+
+  const handleExport = useCallback(() => {
+    console.log('App: handleExport called');
+    if (typeof exportFunction !== 'function') {
+      console.error('Export function not available:', exportFunction);
+      return Promise.reject('Export function not ready');
+    }
+    return exportFunction();
+  }, [exportFunction]);
+
+  const setExportFunctionCallback = useCallback((fn) => {
+    console.log('App: Setting export function');
+    setExportFunction(() => fn);
+  }, []);
+
+  const handleBatchExport = useCallback(async () => {
+    if (!exportFunction) {
+      alert('Export function not ready');
       return;
     }
 
     try {
       const zip = new JSZip();
       
-      // Export all canvases
+      // Export each canvas
       for (let i = 0; i < canvases.length; i++) {
         // Temporarily switch to the canvas we want to export
         const tempActiveIndex = activeCanvasIndex;
@@ -357,37 +460,41 @@ const App = () => {
         // Wait for the state to update
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        const dataUrl = await exportCanvas();
-        if (!dataUrl) continue;
+        try {
+          const dataUrl = await exportFunction();
+          if (!dataUrl) continue;
 
-        const response = await fetch(dataUrl);
-        const blob = await response.blob();
-        
-        const canvas = canvases[i];
-        const filename = canvas.mainImage?.name 
-          ? `canvas-${canvas.mainImage.name}.png`
-          : `canvas-${i + 1}.png`;
-        
-        zip.file(filename, blob);
+          const response = await fetch(dataUrl);
+          const blob = await response.blob();
+          
+          const canvas = canvases[i];
+          const filename = canvas.mainImage?.name 
+            ? `canvas-${canvas.mainImage.name}.png`
+            : `canvas-${i + 1}.png`;
+          
+          zip.file(filename, blob);
+        } catch (error) {
+          console.error(`Error exporting canvas ${i}:`, error);
+        }
       }
       
       // Restore the original active canvas
       setActiveCanvasIndex(activeCanvasIndex);
 
+      // Generate and download zip
       const content = await zip.generateAsync({ type: 'blob' });
-      
       const link = document.createElement('a');
-      link.download = 'canvas-designs.zip';
       link.href = URL.createObjectURL(content);
+      link.download = `canvas-designs-${Date.now()}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
     } catch (error) {
-      console.error('Error exporting batch:', error);
-      alert('Failed to export batch. Please try again.');
+      console.error('Error during batch export:', error);
+      alert('Failed to export all canvases. Please try again.');
     }
-  };
+  }, [canvases, activeCanvasIndex, exportFunction]);
 
   const handleSave = () => {
     try {
@@ -574,8 +681,9 @@ const App = () => {
         onUploadImage={handleMainImageUpload}
         hasMainImage={!!activeCanvas.mainImage}
         onClearCanvas={() => removeCanvas(activeCanvasIndex)}
-        onExport={() => exportCanvas()}
+        onExport={handleExport}
         onBatchExport={handleBatchExport}
+        hasBatchExport={canvases.length > 1}
         canvasCount={canvases.length}
       />
       <div className="flex flex-1 overflow-hidden">
@@ -585,9 +693,21 @@ const App = () => {
           designElements={DESIGN_ELEMENTS}
           handleDragStart={handleDragStart}
           onWatermarkUpload={handleWatermarkUpload}
-          onTextWatermarkAdd={handleTextWatermarkAdd}
+          uploadedImages={uploadedImages}
+          onRemoveImage={removeUploadedImage}
+          selectedElement={selectedElement}
+          updateElementProperties={updateElementProperties}
         />
         <div className="flex flex-col flex-1">
+          <CanvasMenu
+            selectedElement={selectedElement}
+            selectedWatermark={selectedWatermark}
+            watermarks={activeCanvas.watermarks}
+            updateElementProperties={updateElementProperties}
+            updateWatermarkProperties={updateWatermarkProperties}
+            removeElement={removeElement}
+            removeWatermark={removeWatermark}
+          />
           {/* Main Canvas Area */}
           <div className="flex-1 relative bg-gray-100">
             <div 
@@ -632,7 +752,9 @@ const App = () => {
                   updateElementPosition={updateElementPosition}
                   updateElementProperties={updateElementProperties}
                   removeElement={removeElement}
-                  onExport={setExportCanvas}
+                  onExport={setExportFunctionCallback}
+                  onElementSelect={setSelectedElement}
+                  onWatermarkSelect={setSelectedWatermark}
                 />
               </div>
             </div>

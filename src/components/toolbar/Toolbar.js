@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Undo, Redo, Copy, Trash2, Lock,
   Grid3X3, Eye, Save, Upload, Download
@@ -13,12 +13,19 @@ const Toolbar = ({
   onZoom,
   onUploadImage,
   hasMainImage,
+  onClearCanvas,
   onExport,
   onBatchExport,
-  onClearCanvas,
+  hasBatchExport,
   canvasCount,
   children
 }) => {
+  const fileInputRef = useRef(null);
+
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div className="bg-card border-b border-border p-2 flex justify-between items-center">
       <div className="flex space-x-2">
@@ -51,17 +58,21 @@ const Toolbar = ({
         >
           <Grid3X3 size={18} className={showGrid ? 'text-primary' : 'text-muted-foreground'} />
         </Button>
-        <label className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 cursor-pointer flex items-center">
-          <Upload size={16} className="mr-2" />
-          Upload Image{canvasCount > 0 ? 's' : ''}
-          <input
-            type="file"
-            className="hidden"
-            accept="image/*"
-            onChange={onUploadImage}
-            multiple
-          />
-        </label>
+
+        <div className="flex items-center space-x-2">
+          <label className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 cursor-pointer flex items-center">
+            <Upload size={16} className="mr-2" />
+            Upload Image{canvasCount > 0 ? 's' : ''}
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={onUploadImage}
+              multiple
+            />
+          </label>
+        </div>
       </div>
 
       <div className="flex items-center space-x-4">
@@ -74,7 +85,7 @@ const Toolbar = ({
         <ExportButton
           onExport={onExport}
           onBatchExport={onBatchExport}
-          hasBatchExport={canvasCount > 1}
+          hasBatchExport={hasBatchExport}
         />
         {children}
       </div>

@@ -15,7 +15,9 @@ const Canvas = ({
   updateElementPosition,
   updateElementProperties,
   removeElement,
-  onExport
+  onExport,
+  onElementSelect,
+  onWatermarkSelect
 }) => {
   const [selectedWatermark, setSelectedWatermark] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
@@ -33,6 +35,17 @@ const Canvas = ({
     { value: 'Verdana, sans-serif', label: 'Verdana' },
     { value: 'Courier New, monospace', label: 'Courier New' }
   ];
+
+  // Update parent component when element is selected
+  useEffect(() => {
+    const element = elements.find(el => el.id === selectedElement);
+    onElementSelect?.(element || null);
+  }, [selectedElement, elements, onElementSelect]);
+
+  // Update parent component when watermark is selected
+  useEffect(() => {
+    onWatermarkSelect?.(selectedWatermark);
+  }, [selectedWatermark, onWatermarkSelect]);
 
   const handleWatermarkMouseDown = (e, watermark) => {
     e.stopPropagation();
@@ -80,10 +93,11 @@ const Canvas = ({
   };
 
   const handleCanvasClick = (e) => {
-    // Only clear selection if clicking directly on the canvas
     if (e.target === canvasRef.current) {
       setSelectedWatermark(null);
       setSelectedElement(null);
+      onElementSelect?.(null);
+      onWatermarkSelect?.(null);
     }
   };
 
@@ -169,180 +183,153 @@ const Canvas = ({
     }
   };
 
-  const exportCanvas = useCallback(() => {
-    return new Promise((resolve, reject) => {
+  const exportCanvas = useCallback((customWidth = 800, customHeight = 600) => {
+    console.log('Starting canvas export...');
+    return new Promise(async (resolve, reject) => {
       try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const canvasElement = canvasRef.current;
+        // Create a new canvas for export
+        const exportCanvas = document.createElement('canvas');
+        const ctx = exportCanvas.getContext('2d');
         
-        // Set canvas size to match the design area
-        canvas.width = 800;
-        canvas.height = 600;
+        // Set canvas size to the requested dimensions
+        exportCanvas.width = customWidth;
+        exportCanvas.height = customHeight;
 
-        // Fill with white background
+        // Fill white background
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
 
-        // If there's a main image, draw it first
-        if (mainImage) {
-          const img = new Image();
-          img.src = mainImage.url;
-          
-          img.onload = () => {
-            // Draw main image
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
-            // Draw all watermarks
-            let watermarkPromises = watermarks.map(watermark => {
-              return new Promise((resolve) => {
-                if (watermark.type === 'text') {
-                  // Draw text watermark
-                  ctx.save();
-                  ctx.globalAlpha = watermark.opacity;
-                  ctx.translate(watermark.position.x, watermark.position.y);
-                  ctx.scale(watermark.scale, watermark.scale);
-                  ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
-                  
-                  ctx.font = `${watermark.fontSize}px sans-serif`;
-                  ctx.fillStyle = watermark.color;
-                  ctx.fillText(watermark.text, 0, watermark.fontSize);
-                  ctx.restore();
-                  resolve();
-                } else {
-                  // Draw image watermark
-                  const watermarkImg = new Image();
-                  watermarkImg.src = watermark.url;
-                  watermarkImg.onload = () => {
-                    ctx.save();
-                    ctx.globalAlpha = watermark.opacity;
-                    ctx.translate(watermark.position.x, watermark.position.y);
-                    ctx.scale(watermark.scale, watermark.scale);
-                    ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
-                    ctx.drawImage(watermarkImg, 0, 0);
-                    ctx.restore();
-                    resolve();
-                  };
-                  watermarkImg.onerror = () => {
-                    console.error('Error loading watermark image');
-                    resolve();
-                  };
-                }
-              });
-            });
-
-            Promise.all(watermarkPromises)
-              .then(() => {
-                resolve(canvas.toDataURL('image/png'));
-              })
-              .catch(error => {
-                console.error('Error drawing watermarks:', error);
-                reject(error);
-              });
-          };
-
-          img.onerror = (error) => {
-            console.error('Error loading main image:', error);
-            // If main image fails, still try to draw watermarks on white background
-            let watermarkPromises = watermarks.map(watermark => {
-              return new Promise((resolve) => {
-                if (watermark.type === 'text') {
-                  ctx.save();
-                  ctx.globalAlpha = watermark.opacity;
-                  ctx.translate(watermark.position.x, watermark.position.y);
-                  ctx.scale(watermark.scale, watermark.scale);
-                  ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
-                  ctx.font = `${watermark.fontSize}px sans-serif`;
-                  ctx.fillStyle = watermark.color;
-                  ctx.fillText(watermark.text, 0, watermark.fontSize);
-                  ctx.restore();
-                  resolve();
-                } else {
-                  const watermarkImg = new Image();
-                  watermarkImg.src = watermark.url;
-                  watermarkImg.onload = () => {
-                    ctx.save();
-                    ctx.globalAlpha = watermark.opacity;
-                    ctx.translate(watermark.position.x, watermark.position.y);
-                    ctx.scale(watermark.scale, watermark.scale);
-                    ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
-                    ctx.drawImage(watermarkImg, 0, 0);
-                    ctx.restore();
-                    resolve();
-                  };
-                  watermarkImg.onerror = () => {
-                    console.error('Error loading watermark image');
-                    resolve();
-                  };
-                }
-              });
-            });
-
-            Promise.all(watermarkPromises)
-              .then(() => {
-                resolve(canvas.toDataURL('image/png'));
-              })
-              .catch(error => {
-                console.error('Error drawing watermarks:', error);
-                reject(error);
-              });
-          };
-        } else {
-          // No main image, just draw watermarks on white background
-          let watermarkPromises = watermarks.map(watermark => {
-            return new Promise((resolve) => {
-              if (watermark.type === 'text') {
-                ctx.save();
-                ctx.globalAlpha = watermark.opacity;
-                ctx.translate(watermark.position.x, watermark.position.y);
-                ctx.scale(watermark.scale, watermark.scale);
-                ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
-                ctx.font = `${watermark.fontSize}px sans-serif`;
-                ctx.fillStyle = watermark.color;
-                ctx.fillText(watermark.text, 0, watermark.fontSize);
-                ctx.restore();
-                resolve();
-              } else {
-                const watermarkImg = new Image();
-                watermarkImg.src = watermark.url;
-                watermarkImg.onload = () => {
-                  ctx.save();
-                  ctx.globalAlpha = watermark.opacity;
-                  ctx.translate(watermark.position.x, watermark.position.y);
-                  ctx.scale(watermark.scale, watermark.scale);
-                  ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
-                  ctx.drawImage(watermarkImg, 0, 0);
-                  ctx.restore();
-                  resolve();
-                };
-                watermarkImg.onerror = () => {
-                  console.error('Error loading watermark image');
-                  resolve();
-                };
-              }
-            });
-          });
-
-          Promise.all(watermarkPromises)
-            .then(() => {
-              resolve(canvas.toDataURL('image/png'));
-            })
-            .catch(error => {
-              console.error('Error drawing watermarks:', error);
+        // Helper function to load image
+        const loadImage = (url) => {
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = (error) => {
+              console.error('Error loading image:', error);
               reject(error);
-            });
+            };
+            img.src = url;
+          });
+        };
+
+        try {
+          // Draw main image if exists
+          if (mainImage) {
+            console.log('Drawing main image...');
+            const img = await loadImage(mainImage.url);
+            ctx.drawImage(img, 0, 0, exportCanvas.width, exportCanvas.height);
+            console.log('Main image drawn');
+          }
+
+          // Calculate scale factors for the new dimensions
+          const scaleX = customWidth / 800;
+          const scaleY = customHeight / 600;
+
+          // Draw elements with proper scaling
+          if (elements?.length) {
+            console.log('Drawing elements...');
+            for (const element of elements) {
+              ctx.save();
+              // Scale position according to new dimensions
+              ctx.translate(element.position.x * scaleX, element.position.y * scaleY);
+              // Scale size according to new dimensions while maintaining relative scale
+              ctx.scale((element.scale || 1) * scaleX, (element.scale || 1) * scaleY);
+              ctx.rotate((element.rotation || 0) * Math.PI / 180);
+
+              if (element.type === 'text') {
+                // Scale font size according to new dimensions
+                const scaledFontSize = element.fontSize * Math.min(scaleX, scaleY);
+                ctx.font = `${scaledFontSize}px ${element.fontFamily || 'Arial, sans-serif'}`;
+                ctx.fillStyle = element.color || '#000000';
+                ctx.fillText(element.text, 0, scaledFontSize);
+              } else if (element.shape) {
+                ctx.fillStyle = element.color;
+                const scaledWidth = element.size.width * scaleX;
+                const scaledHeight = element.size.height * scaleY;
+                switch (element.shape) {
+                  case 'rectangle':
+                    ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+                    break;
+                  case 'circle':
+                    ctx.beginPath();
+                    ctx.arc(
+                      scaledWidth / 2,
+                      scaledHeight / 2,
+                      scaledWidth / 2,
+                      0,
+                      Math.PI * 2
+                    );
+                    ctx.fill();
+                    break;
+                  case 'triangle':
+                    ctx.beginPath();
+                    ctx.moveTo(scaledWidth / 2, 0);
+                    ctx.lineTo(scaledWidth, scaledHeight);
+                    ctx.lineTo(0, scaledHeight);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                }
+              }
+              ctx.restore();
+            }
+          }
+
+          // Draw watermarks with proper scaling
+          if (watermarks?.length) {
+            console.log('Drawing watermarks...');
+            for (const watermark of watermarks) {
+              ctx.save();
+              ctx.globalAlpha = watermark.opacity || 1;
+              // Scale position according to new dimensions
+              ctx.translate(watermark.position.x * scaleX, watermark.position.y * scaleY);
+              // Scale size according to new dimensions while maintaining relative scale
+              ctx.scale((watermark.scale || 1) * scaleX, (watermark.scale || 1) * scaleY);
+              ctx.rotate((watermark.rotation || 0) * Math.PI / 180);
+
+              if (watermark.url) {
+                try {
+                  const img = await loadImage(watermark.url);
+                  // Scale watermark image while maintaining aspect ratio
+                  const aspectRatio = img.width / img.height;
+                  const maxSize = 200 * Math.min(scaleX, scaleY);
+                  const width = Math.min(maxSize, img.width * scaleX);
+                  const height = width / aspectRatio;
+                  ctx.drawImage(img, 0, 0, width, height);
+                } catch (error) {
+                  console.error('Error drawing watermark image:', error);
+                }
+              }
+              ctx.restore();
+            }
+          }
+
+          // Generate final image with maximum quality
+          console.log('All drawing completed, generating final image...');
+          const dataUrl = exportCanvas.toDataURL('image/png', 1.0);
+          console.log('Data URL generated successfully');
+          resolve(dataUrl);
+
+        } catch (error) {
+          console.error('Error during drawing:', error);
+          reject(error);
         }
       } catch (error) {
         console.error('Error in export process:', error);
         reject(error);
       }
     });
-  }, [canvasRef, mainImage, watermarks]);
+  }, [mainImage, elements, watermarks]);
 
   // Connect the export function to the parent component
   useEffect(() => {
-    if (onExport) {
+    console.log('Canvas: Setting up export function...');
+    if (typeof onExport === 'function') {
+      console.log('Canvas: Passing export function to parent');
       onExport(exportCanvas);
+    } else {
+      console.warn('Canvas: onExport is not a function:', onExport);
     }
   }, [exportCanvas, onExport]);
 
@@ -377,9 +364,11 @@ const Canvas = ({
             />
           )}
           
-          {elements?.map((element) => (
-            <React.Fragment key={element.id}>
+          {/* Elements Layer */}
+          <div className="absolute inset-0">
+            {elements?.map((element) => (
               <div
+                key={`element-${element.id}`}
                 className={`absolute cursor-move ${selectedElement === element.id ? 'ring-2 ring-blue-500' : ''}`}
                 style={{
                   left: `${element.position.x}px`,
@@ -409,6 +398,7 @@ const Canvas = ({
                         fontFamily: element.fontFamily || 'Arial, sans-serif',
                         fontWeight: element.fontWeight,
                         color: element.color,
+                        opacity: element.opacity || 1,
                         width: 'auto',
                         minWidth: '50px'
                       }}
@@ -421,6 +411,7 @@ const Canvas = ({
                         fontFamily: element.fontFamily || 'Arial, sans-serif',
                         fontWeight: element.fontWeight,
                         color: element.color,
+                        opacity: element.opacity || 1,
                         whiteSpace: 'nowrap',
                         userSelect: 'none'
                       }}
@@ -429,9 +420,21 @@ const Canvas = ({
                     </div>
                   )
                 ) : element.shape === 'rectangle' ? (
-                  <div className="w-full h-full bg-blue-500 rounded-md" />
+                  <div 
+                    className="w-full h-full rounded-md" 
+                    style={{ 
+                      backgroundColor: element.color || '#3B82F6',
+                      opacity: element.opacity || 1
+                    }}
+                  />
                 ) : element.shape === 'circle' ? (
-                  <div className="w-full h-full bg-green-500 rounded-full" />
+                  <div 
+                    className="w-full h-full rounded-full" 
+                    style={{ 
+                      backgroundColor: element.color || '#22C55E',
+                      opacity: element.opacity || 1
+                    }}
+                  />
                 ) : element.shape === 'triangle' && (
                   <div className="w-full h-full overflow-hidden">
                     <div
@@ -439,96 +442,21 @@ const Canvas = ({
                       style={{
                         borderLeft: `${element.size?.width / 2 || 50}px solid transparent`,
                         borderRight: `${element.size?.width / 2 || 50}px solid transparent`,
-                        borderBottom: `${element.size?.height || 100}px solid #f59e0b`
+                        borderBottom: `${element.size?.height || 100}px solid ${element.color || '#F59E0B'}`,
+                        opacity: element.opacity || 1
                       }}
                     />
                   </div>
                 )}
               </div>
-              
-              {selectedElement === element.id && element.type === 'text' && (
-                <div 
-                  className="absolute bg-white shadow-lg rounded-lg p-2 flex items-center space-x-2 z-50"
-                  style={{
-                    left: `${element.position.x}px`,
-                    top: `${element.position.y + 40}px`
-                  }}
-                >
-                  {!editingText && (
-                    <>
-                      <button
-                        className="p-1 hover:bg-gray-100 rounded text-xs"
-                        onClick={() => setEditingText(element.id)}
-                      >
-                        Edit Text
-                      </button>
-                      <div className="h-4 w-px bg-gray-300" />
-                    </>
-                  )}
-                  <select
-                    className="text-sm p-1 border rounded"
-                    value={element.fontFamily || 'Arial, sans-serif'}
-                    onChange={(e) => handleFontChange(element.id, e.target.value)}
-                  >
-                    {fontOptions.map(font => (
-                      <option key={font.value} value={font.value}>{font.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    className="w-16 text-sm p-1 border rounded"
-                    value={element.fontSize || 24}
-                    onChange={(e) => handleFontSizeChange(element.id, e.target.value)}
-                    min="8"
-                    max="72"
-                  />
-                  <input
-                    type="color"
-                    className="w-8 h-8 p-0 cursor-pointer"
-                    value={element.color || '#000000'}
-                    onChange={(e) => handleColorChange(element.id, e.target.value)}
-                    title="Text Color"
-                  />
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustElementProperty(element.id, 'scale', -0.1)}
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustElementProperty(element.id, 'scale', 0.1)}
-                  >
-                    <Plus size={16} />
-                  </button>
-                  <div className="h-4 w-px bg-gray-300" />
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustElementProperty(element.id, 'rotation', -45)}
-                  >
-                    <RotateCcw size={16} />
-                  </button>
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustElementProperty(element.id, 'rotation', 45)}
-                  >
-                    <RotateCw size={16} />
-                  </button>
-                  <div className="h-4 w-px bg-gray-300" />
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded text-red-500"
-                    onClick={() => removeElement(element.id)}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-          
-          {watermarks.map((watermark) => (
-            <React.Fragment key={watermark.id}>
+            ))}
+          </div>
+
+          {/* Watermarks Layer */}
+          <div className="absolute inset-0">
+            {watermarks.map((watermark) => (
               <div
+                key={`watermark-${watermark.id}`}
                 className={`absolute cursor-move ${selectedWatermark === watermark.id ? 'ring-2 ring-blue-500' : ''}`}
                 style={{
                   left: `${watermark.position.x}px`,
@@ -541,111 +469,16 @@ const Canvas = ({
                 }}
                 onMouseDown={(e) => handleWatermarkMouseDown(e, watermark)}
               >
-                {watermark.type === 'text' ? (
-                  <div
-                    style={{
-                      fontSize: `${watermark.fontSize || 24}px`,
-                      fontFamily: watermark.fontFamily || 'Arial, sans-serif',
-                      fontWeight: watermark.fontWeight,
-                      color: watermark.color,
-                      whiteSpace: 'nowrap',
-                      userSelect: 'none'
-                    }}
-                  >
-                    {watermark.text}
-                  </div>
-                ) : (
-                  <img
-                    src={watermark.url}
-                    alt={watermark.name}
-                    className="max-w-[200px] max-h-[200px] object-contain select-none"
-                    draggable={false}
-                    style={{ pointerEvents: 'none' }}
-                  />
-                )}
+                <img
+                  src={watermark.url}
+                  alt={watermark.name}
+                  className="max-w-[200px] max-h-[200px] object-contain select-none"
+                  draggable={false}
+                  style={{ pointerEvents: 'none' }}
+                />
               </div>
-              
-              {selectedWatermark === watermark.id && watermark.type === 'text' && (
-                <div 
-                  className="absolute bg-white shadow-lg rounded-lg p-2 flex items-center space-x-2 z-50"
-                  style={{
-                    left: `${watermark.position.x}px`,
-                    top: `${watermark.position.y + 40}px`
-                  }}
-                >
-                  <select
-                    className="text-sm p-1 border rounded"
-                    value={watermark.fontFamily || 'Arial, sans-serif'}
-                    onChange={(e) => handleFontChange(watermark.id, e.target.value, true)}
-                  >
-                    {fontOptions.map(font => (
-                      <option key={font.value} value={font.value}>{font.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    className="w-16 text-sm p-1 border rounded"
-                    value={watermark.fontSize || 24}
-                    onChange={(e) => handleFontSizeChange(watermark.id, e.target.value, true)}
-                    min="8"
-                    max="72"
-                  />
-                  <input
-                    type="color"
-                    className="w-8 h-8 p-0 cursor-pointer"
-                    value={watermark.color || '#000000'}
-                    onChange={(e) => handleColorChange(watermark.id, e.target.value, true)}
-                    title="Text Color"
-                  />
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustWatermarkProperty(watermark.id, 'scale', -0.1)}
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustWatermarkProperty(watermark.id, 'scale', 0.1)}
-                  >
-                    <Plus size={16} />
-                  </button>
-                  <div className="h-4 w-px bg-gray-300" />
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustWatermarkProperty(watermark.id, 'opacity', -0.1)}
-                  >
-                    <ZoomOut size={16} />
-                  </button>
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustWatermarkProperty(watermark.id, 'opacity', 0.1)}
-                  >
-                    <ZoomIn size={16} />
-                  </button>
-                  <div className="h-4 w-px bg-gray-300" />
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustWatermarkProperty(watermark.id, 'rotation', -15)}
-                  >
-                    <RotateCcw size={16} />
-                  </button>
-                  <button
-                    className="p-1 hover:bg-gray-100 rounded"
-                    onClick={() => adjustWatermarkProperty(watermark.id, 'rotation', 15)}
-                  >
-                    <RotateCw size={16} />
-                  </button>
-                  <div className="h-4 w-px bg-gray-300" />
-                  <button
-                    className="p-1 hover:bg-red-100 text-red-600 rounded"
-                    onClick={() => removeWatermark(watermark.id)}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              )}
-            </React.Fragment>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
