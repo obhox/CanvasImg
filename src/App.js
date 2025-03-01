@@ -11,6 +11,7 @@ import { saveCanvas, getCanvases, updateCanvas, deleteCanvas, uploadImage, getIm
 import JSZip from 'jszip';
 import { Trash2, PlusSquare } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
+import DOMPurify from 'dompurify';
 
 const THUMBNAIL_UPDATE_DELAY = 500; // ms
 
@@ -25,15 +26,20 @@ const App = () => {
   const [canvases, setCanvases] = useState(() => {
     try {
       const savedCanvases = localStorage.getItem('canvases');
-      return savedCanvases ? JSON.parse(savedCanvases) : [
-        {
+      const parsedCanvases = savedCanvases ? JSON.parse(savedCanvases) : null;
+      
+      // Ensure we have at least one valid canvas
+      if (!parsedCanvases || !Array.isArray(parsedCanvases) || parsedCanvases.length === 0) {
+        return [{
           id: 'default',
           mainImage: null,
           elements: [],
           watermarks: [],
           backgroundColor: '#ffffff'
-        }
-      ];
+        }];
+      }
+      
+      return parsedCanvases;
     } catch (error) {
       console.error('Error loading canvases from localStorage:', error);
       return [{
@@ -146,7 +152,7 @@ const App = () => {
     return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
   };
 
-  // Modified handleMainImageUpload to use Supabase storage
+  // Handle image upload directly to canvas without Supabase storage
   const handleMainImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -170,61 +176,38 @@ const App = () => {
     if (invalidFiles.length > 0) return;
 
     try {
-      // Show loading state
       setLoading(true);
 
-      // Upload images to Supabase storage and create new canvases
+      // Process images directly and create new canvases
       const newCanvases = await Promise.all(
         files.map(async (file) => {
-          try {
-            console.log('Processing file:', file.name);
-            const uploadResult = await uploadImage(file);
-            console.log('Upload result:', uploadResult);
-
-            if (!uploadResult || !uploadResult.url) {
-              throw new Error('Upload failed - no URL returned');
-            }
-
-            const canvas = {
-              id: generateUniqueId(),
-              user_id: user.id,
-              mainImage: {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const imageUrl = event.target.result;
+              resolve({
                 id: generateUniqueId(),
-                name: file.name,
-                url: uploadResult.url,
-                path: uploadResult.path
-              },
-              elements: [],
-              watermarks: [],
-              backgroundColor: '#ffffff'
+                mainImage: {
+                  id: generateUniqueId(),
+                  name: file.name,
+                  url: imageUrl,
+                  type: 'local'
+                },
+                elements: [],
+                watermarks: [],
+                backgroundColor: '#ffffff'
+              });
             };
-
-            // Save canvas to Supabase database
-            const savedCanvas = await saveCanvas(canvas);
-            console.log('Canvas saved:', savedCanvas);
-            return savedCanvas;
-          } catch (error) {
-            console.error('Error processing file:', file.name, error);
-            throw error;
-          }
+            reader.readAsDataURL(file);
+          });
         })
       );
 
-      // Update local state
-      if (canvases.length === 1 && !canvases[0].mainImage) {
-        setCanvases(newCanvases);
-      } else {
-        setCanvases(prev => [...prev, ...newCanvases]);
-      }
-
-      // Set active canvas to the first new one
-      setActiveCanvasIndex(canvases.length === 1 && !canvases[0].mainImage ? 0 : canvases.length);
-
-      // Show success message
-      alert('Images uploaded successfully!');
+      setCanvases(prev => [...prev, ...newCanvases]);
+      setActiveCanvasIndex(prev => prev + newCanvases.length);
     } catch (error) {
-      console.error('Error uploading images:', error);
-      alert(`Failed to upload images: ${error.message}`);
+      console.error('Error processing images:', error);
+      alert('Error processing images. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -300,7 +283,21 @@ const App = () => {
     }
   };
 
-  const activeCanvas = canvases[activeCanvasIndex];
+  // Ensure activeCanvasIndex is valid
+  useEffect(() => {
+    if (activeCanvasIndex >= canvases.length) {
+      setActiveCanvasIndex(Math.max(0, canvases.length - 1));
+    }
+  }, [canvases.length, activeCanvasIndex]);
+
+  // Get active canvas with safety check
+  const activeCanvas = canvases[activeCanvasIndex] || {
+    id: 'default',
+    mainImage: null,
+    elements: [],
+    watermarks: [],
+    backgroundColor: '#ffffff'
+  };
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -920,6 +917,23 @@ const App = () => {
     }
   };
 
+  const sanitizeText = (text) => {
+    return DOMPurify.sanitize(text, {
+      ALLOWED_TAGS: [], // Only allow text, no HTML
+      ALLOWED_ATTR: []
+    });
+  };
+
+  const handleElementAdd = (element) => {
+    const updatedCanvases = [...canvases];
+    if (element.type === 'text') {
+      element.content = sanitizeText(element.content);
+    }
+    updatedCanvases[activeCanvasIndex].elements.push(element);
+    setCanvases(updatedCanvases);
+    saveToHistory(updatedCanvases);
+  };
+
   // If user is not authenticated, show login page
   if (!user) {
     return <LoginPage />;
@@ -934,7 +948,7 @@ const App = () => {
         onSave={handleSave}
         onZoom={handleZoom}
         onUploadImage={handleMainImageUpload}
-        hasMainImage={!!activeCanvas.mainImage}
+        hasMainImage={!!activeCanvas?.mainImage}
         onClearCanvas={() => removeCanvas(activeCanvasIndex)}
         onExport={handleExport}
         onBatchExport={handleBatchExport}

@@ -3,18 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
-console.log('Environment Variables:', {
-  supabaseUrl,
-  supabaseAnonKey,
-  env: process.env
-});
-
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing environment variables:', {
-    supabaseUrl: !!supabaseUrl,
-    supabaseAnonKey: !!supabaseAnonKey
-  });
-  throw new Error('Missing Supabase environment variables');
+  throw new Error('Missing required Supabase configuration. Please check your environment variables.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -46,34 +36,38 @@ export const signOut = async () => {
 // Storage helper functions
 export const uploadImage = async (file, bucket = 'images') => {
   try {
-    console.log('Starting image upload:', { fileName: file.name, fileSize: file.size, fileType: file.type });
-    
-    // Verify bucket exists
-    const { data: buckets, error: bucketsError } = await supabase
-      .storage
-      .listBuckets();
-
-    console.log('Available buckets:', buckets);
-
-    if (bucketsError) {
-      console.error('Error checking buckets:', bucketsError);
-      throw new Error(`Could not verify storage bucket: ${bucketsError.message}`);
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      throw new Error('Invalid file type. Only JPEG, PNG, SVG, and GIF files are allowed.');
     }
+
+    // Validate file size (5MB limit)
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_SIZE) {
+      throw new Error('File size exceeds 5MB limit.');
+    }
+
+    // Sanitize filename
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'svg', 'gif'].includes(fileExt)) {
+      throw new Error('Invalid file extension.');
+    }
+
+    // Generate a secure random filename
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    // Verify bucket exists
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    if (bucketsError) throw bucketsError;
 
     const bucketExists = buckets.some(b => b.name === bucket);
     if (!bucketExists) {
-      console.error('Available buckets:', buckets.map(b => b.name));
-      throw new Error(`Storage bucket "${bucket}" does not exist. Available buckets: ${buckets.map(b => b.name).join(', ')}`);
+      throw new Error(`Storage bucket "${bucket}" does not exist.`);
     }
 
-    // Generate a unique filename to prevent collisions
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    console.log('Generated file path:', filePath);
-
-    // Upload the file
+    // Upload with content type verification
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(filePath, file, {
@@ -82,43 +76,11 @@ export const uploadImage = async (file, bucket = 'images') => {
         contentType: file.type
       });
 
-    if (error) {
-      console.error('Supabase storage upload error:', error);
-      if (error.message.includes('duplicate')) {
-        throw new Error('A file with this name already exists');
-      } else if (error.message.includes('permission')) {
-        throw new Error('You do not have permission to upload files. Please sign in.');
-      } else if (error.message.includes('bucket')) {
-        throw new Error(`Bucket error: ${error.message}. Please ensure the 'images' bucket exists and is properly configured.`);
-      } else {
-        throw error;
-      }
-    }
+    if (error) throw error;
+    return data;
 
-    if (!data) {
-      throw new Error('Upload successful but no data returned');
-    }
-
-    console.log('Upload successful:', data);
-
-    // Get the public URL
-    const { data: urlData } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(filePath);
-
-    if (!urlData || !urlData.publicUrl) {
-      throw new Error('Failed to generate public URL for uploaded file');
-    }
-
-    console.log('Public URL generated:', urlData.publicUrl);
-
-    return {
-      path: filePath,
-      url: urlData.publicUrl
-    };
   } catch (error) {
-    console.error('Upload function error:', error);
-    throw new Error(`Failed to upload image: ${error.message}`);
+    throw new Error(`Upload failed: ${error.message}`);
   }
 };
 
