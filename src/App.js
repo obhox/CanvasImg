@@ -9,7 +9,8 @@ import { DESIGN_ELEMENTS } from './utils/constants';
 import { useAuth } from './contexts/AuthContext';
 import { saveCanvas, getCanvases, updateCanvas, deleteCanvas, uploadImage, getImageUrl } from './lib/supabase';
 import JSZip from 'jszip';
-import { Trash2 } from 'lucide-react';
+import { Trash2, PlusSquare } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 const THUMBNAIL_UPDATE_DELAY = 500; // ms
 
@@ -234,33 +235,65 @@ const App = () => {
     setSelectedElement(null);
   };
 
-  // Modified removeCanvas to delete from Supabase
+  // Modified removeCanvas to handle deletion properly
   const removeCanvas = async (index) => {
     try {
-      const canvas = canvases[index];
-      await deleteCanvas(canvas.id);
+      // Don't allow deleting the last canvas
+      if (canvases.length <= 1) {
+        alert('Cannot delete the last canvas');
+        return;
+      }
 
+      const canvas = canvases[index];
+      
+      // Remove from Supabase if authenticated and canvas has an ID
+      if (user && canvas.id !== 'default') {
+        try {
+          await deleteCanvas(canvas.id);
+        } catch (error) {
+          console.error('Error deleting from Supabase:', error);
+          // Continue with local deletion even if Supabase fails
+        }
+      }
+
+      // Update local state
       setCanvases(prev => {
         const newCanvases = [...prev];
         newCanvases.splice(index, 1);
         
-        if (newCanvases.length === 0) {
-          newCanvases.push({
-            id: 'default',
-            user_id: user.id,
-            mainImage: null,
-            elements: [],
-            watermarks: [],
-            backgroundColor: '#ffffff'
-          });
+        // Update localStorage
+        try {
+          localStorage.setItem('canvases', JSON.stringify(newCanvases));
+        } catch (error) {
+          console.error('Error saving to localStorage:', error);
         }
-        
-        if (index <= activeCanvasIndex) {
-          setActiveCanvasIndex(Math.max(0, Math.min(activeCanvasIndex - 1, newCanvases.length - 1)));
-        }
-        
+
         return newCanvases;
       });
+
+      // Update active canvas index
+      setActiveCanvasIndex(prevIndex => {
+        // If we're deleting the current canvas or one before it
+        if (index <= prevIndex) {
+          // If we're deleting the last canvas in the list
+          if (prevIndex === canvases.length - 1) {
+            return Math.max(0, prevIndex - 1);
+          }
+          // If we're deleting a canvas but there are more after it
+          return Math.max(0, prevIndex);
+        }
+        return prevIndex;
+      });
+
+      // Add to history
+      const historyState = JSON.stringify(canvases.filter((_, i) => i !== index));
+      setHistory(prev => {
+        const newHistory = prev.slice(0, currentHistoryIndex + 1);
+        return [...newHistory, historyState];
+      });
+      setCurrentHistoryIndex(prev => prev + 1);
+
+      console.log('Canvas deleted successfully:', canvas.id);
     } catch (error) {
       console.error('Error removing canvas:', error);
       alert('Failed to remove canvas. Please try again.');
@@ -827,6 +860,66 @@ const App = () => {
     };
   }, []);
 
+  // Update createCanvas function
+  const createCanvas = async () => {
+    try {
+      const newCanvas = {
+        id: generateUniqueId(),
+        user_id: user?.id || 'default',
+        mainImage: null,
+        elements: [],
+        watermarks: [],
+        backgroundColor: '#ffffff'
+      };
+
+      // Save to Supabase if user is authenticated
+      let canvasToAdd = newCanvas;
+      if (user) {
+        try {
+          const savedCanvas = await saveCanvas(newCanvas);
+          if (savedCanvas) {
+            canvasToAdd = savedCanvas;
+          }
+        } catch (error) {
+          console.error('Error saving to Supabase:', error);
+          // Continue with local canvas if Supabase save fails
+        }
+      }
+
+      // Update state using functional updates to ensure we have the latest state
+      setCanvases(prevCanvases => {
+        const newCanvases = [...prevCanvases, canvasToAdd];
+        // Update localStorage
+        try {
+          localStorage.setItem('canvases', JSON.stringify(newCanvases));
+        } catch (error) {
+          console.error('Error saving to localStorage:', error);
+        }
+        return newCanvases;
+      });
+
+      // Set the new canvas as active using the current length
+      setActiveCanvasIndex(prevIndex => {
+        const newIndex = prevIndex + 1;
+        console.log('Setting active canvas to index:', newIndex);
+        return newIndex;
+      });
+      
+      // Add to history
+      const historyState = JSON.stringify([...canvases, canvasToAdd]);
+      setHistory(prev => {
+        const newHistory = prev.slice(0, currentHistoryIndex + 1);
+        return [...newHistory, historyState];
+      });
+      setCurrentHistoryIndex(prev => prev + 1);
+
+      console.log('Canvas created successfully:', canvasToAdd);
+    } catch (error) {
+      console.error('Error creating canvas:', error);
+      alert('Failed to create new canvas. Please try again.');
+    }
+  };
+
   // If user is not authenticated, show login page
   if (!user) {
     return <LoginPage />;
@@ -834,6 +927,7 @@ const App = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
+      <Analytics />
       <Toolbar
         showGrid={showGrid}
         setShowGrid={setShowGrid}
@@ -851,6 +945,7 @@ const App = () => {
         onRedo={handleRedo}
         canUndo={currentHistoryIndex > 0}
         canRedo={currentHistoryIndex < history.length - 1}
+        onCreateCanvas={createCanvas}
       />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
@@ -894,6 +989,13 @@ const App = () => {
               }}>
                 <div className="absolute inset-0 bg-white" />
                 <div className="absolute top-2 right-2 z-50 flex gap-2">
+                  <button
+                    className="p-1 bg-white/80 rounded-full hover:bg-blue-100 hover:text-blue-600 transition-colors"
+                    onClick={createCanvas}
+                    title="Create New Canvas"
+                  >
+                    <PlusSquare size={16} />
+                  </button>
                   <button
                     className="p-1 bg-white/80 rounded-full hover:bg-red-100 hover:text-red-600 transition-colors"
                     onClick={() => removeCanvas(activeCanvasIndex)}

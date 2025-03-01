@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
 import {
   Undo, Redo, Copy, Trash2, Lock,
-  Grid3X3, Eye, Save, Upload, Download
+  Grid3X3, Eye, Save, Upload, Download,
+  PlusSquare
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import ExportButton from '../ui/ExportButton';
@@ -23,6 +24,7 @@ const Toolbar = ({
   onRedo,
   canUndo,
   canRedo,
+  onCreateCanvas,
   children
 }) => {
   const fileInputRef = useRef(null);
@@ -55,6 +57,14 @@ const Toolbar = ({
         <div className="h-6 w-px bg-border mx-1"></div>
         <Button variant="ghost" size="icon">
           <Copy size={18} />
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={onCreateCanvas}
+          title="Create New Canvas"
+        >
+          <PlusSquare size={18} />
         </Button>
         <Button 
           variant="ghost" 
